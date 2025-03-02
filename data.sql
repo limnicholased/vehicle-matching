@@ -9,7 +9,7 @@ CREATE TABLE vehicle (
 );
 
 CREATE TABLE listing (
-  it TEXT NOT NULL PRIMARY KEY,
+  id TEXT NOT NULL PRIMARY KEY,
   vehicle_id TEXT NOT NULL REFERENCES vehicle(id),
   url TEXT NOT NULL,
   price INT NOT NULL,
