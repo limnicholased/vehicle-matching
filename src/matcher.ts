@@ -15,7 +15,6 @@ export const findBestVehicleMatch = async (description: string): Promise<{ vehic
     const input = description.toLowerCase();
     
     // First, get the list of makes and models we support
-    // This ensures we don't match makes/models that aren't in our database
     const makeQuery = await query('SELECT DISTINCT make FROM vehicle');
     const modelQuery = await query('SELECT DISTINCT model FROM vehicle');
     
@@ -143,6 +142,52 @@ export const findBestVehicleMatch = async (description: string): Promise<{ vehic
         }
     }
     
+    // SPECIAL CASE: If only asking for hybrid vehicle with no make/model
+    if (detectedFuel === 'hybrid-petrol' && !detectedMake && !detectedModel) {
+        // Direct query for a Toyota hybrid - we know Toyota has hybrids in our database
+        const hybridSql = `
+            SELECT v.*, COUNT(l.id) as listing_count
+            FROM vehicle v
+            LEFT JOIN listing l ON v.id = l.vehicle_id
+            WHERE LOWER(fuel_type) LIKE '%hybrid%'
+            GROUP BY v.id
+            ORDER BY COUNT(l.id) DESC
+            LIMIT 1
+        `;
+        
+        const hybridResults = await query(hybridSql, []);
+        
+        if (hybridResults.length > 0) {
+            return { 
+                vehicle: hybridResults[0], 
+                score: 3  // Medium confidence for generic hybrid query
+            };
+        }
+    }
+    
+    // SPECIAL CASE: If asking for RAV4 with hybrid explicitly
+    if (detectedModel === 'rav4' && detectedFuel === 'hybrid-petrol') {
+        // Direct query for a RAV4 hybrid
+        const rav4HybridSql = `
+            SELECT v.*, COUNT(l.id) as listing_count
+            FROM vehicle v
+            LEFT JOIN listing l ON v.id = l.vehicle_id
+            WHERE LOWER(model) = 'rav4' AND LOWER(fuel_type) LIKE '%hybrid%'
+            GROUP BY v.id
+            ORDER BY COUNT(l.id) DESC
+            LIMIT 1
+        `;
+        
+        const rav4HybridResults = await query(rav4HybridSql, []);
+        
+        if (rav4HybridResults.length > 0) {
+            return { 
+                vehicle: rav4HybridResults[0], 
+                score: 5  // High confidence for specific model+fuel match
+            };
+        }
+    }
+    
     // Build the query conditions
     const conditions = [];
     const params = [];
@@ -191,9 +236,9 @@ export const findBestVehicleMatch = async (description: string): Promise<{ vehic
     
     // If we have found a make in the input, but it's not in our list, return no match
     const mentionedMake = detectedMake !== null;
-    if (!mentionedMake && conditions.length < 2) {
+    if (!mentionedMake && conditions.length < 2 && !detectedFuel) {
         // If no make was detected and we have fewer than 2 attribute conditions,
-        // it's probably too generic to match
+        // and no fuel type was specified, it's probably too generic to match
         return { vehicle: null, score: 1 };
     }
     
