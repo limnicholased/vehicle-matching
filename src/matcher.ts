@@ -1,4 +1,15 @@
 import { query } from './db';
+import {
+    makeAliases,
+    modelAliases,
+    unknownMakes,
+    unknownModels,
+    badgePatterns,
+    fuelTypePatterns,
+    transmissionPatterns,
+    driveTypePatterns,
+    attributeWeights
+} from './features';
 
 interface Vehicle {
   id: string;
@@ -14,18 +25,17 @@ export const findBestVehicleMatch = async (description: string): Promise<{ vehic
     // Normalize input
     const input = description.toLowerCase();
     
-    // First, get the list of makes and models we support
+    // Get database makes and models
     const makeQuery = await query('SELECT DISTINCT make FROM vehicle');
     const modelQuery = await query('SELECT DISTINCT model FROM vehicle');
     
     const availableMakes = makeQuery.map(row => row.make.toLowerCase());
     const availableModels = modelQuery.map(row => row.model.toLowerCase());
     
-    // Extract possible makes
+    // Extract make
     let detectedMake = null;
-    const makeAliases = { 'vw': 'volkswagen' };
     
-    // Check for exact make matches with word boundaries
+    // Check exact make matches
     for (const make of availableMakes) {
         const regex = new RegExp(`\\b${make}\\b`, 'i');
         if (regex.test(input)) {
@@ -34,7 +44,7 @@ export const findBestVehicleMatch = async (description: string): Promise<{ vehic
         }
     }
     
-    // Check for aliases if no direct match
+    // Check aliases
     if (!detectedMake) {
         for (const [alias, make] of Object.entries(makeAliases)) {
             const regex = new RegExp(`\\b${alias}\\b`, 'i');
@@ -45,8 +55,7 @@ export const findBestVehicleMatch = async (description: string): Promise<{ vehic
         }
     }
     
-    // If using a make that's not in our database, return no match
-    const unknownMakes = ['honda', 'ford', 'bmw', 'mazda', 'hyundai', 'kia', 'nissan', 'subaru', 'mercedes', 'lexus'];
+    // Check for known unavailable makes
     for (const make of unknownMakes) {
         const regex = new RegExp(`\\b${make}\\b`, 'i');
         if (regex.test(input)) {
@@ -54,13 +63,10 @@ export const findBestVehicleMatch = async (description: string): Promise<{ vehic
         }
     }
     
-    // Extract possible models
+    // Extract model
     let detectedModel = null;
-    const modelAliases = { 'rav 4': 'rav4' };
     
-    // We need to be strict about models that aren't in our database
-    // Common models that we know aren't in our dataset
-    const unknownModels = ['polo', 'corolla', 'accord', 'mustang', 'civic', 'hilux'];
+    // Check for known unavailable models
     for (const model of unknownModels) {
         const regex = new RegExp(`\\b${model}\\b`, 'i');
         if (regex.test(input)) {
@@ -68,9 +74,8 @@ export const findBestVehicleMatch = async (description: string): Promise<{ vehic
         }
     }
     
-    // Check for exact model matches with word boundaries
+    // Check exact model matches
     for (const model of availableModels) {
-        // Special handling for short model names like "86"
         const regex = model.length <= 2 ? 
                 new RegExp(`\\b${model}\\b`, 'i') : 
                 new RegExp(`\\b${model}\\b`, 'i');
@@ -80,7 +85,7 @@ export const findBestVehicleMatch = async (description: string): Promise<{ vehic
         }
     }
     
-    // Check for aliases if no direct match
+    // Check model aliases
     if (!detectedModel) {
         for (const [alias, model] of Object.entries(modelAliases)) {
             const regex = new RegExp(`\\b${alias}\\b`, 'i');
@@ -93,45 +98,35 @@ export const findBestVehicleMatch = async (description: string): Promise<{ vehic
     
     // Extract fuel type
     let detectedFuel = null;
-    if (input.includes('petrol') || input.includes('gasoline') || input.includes('gas')) {
-        detectedFuel = 'petrol';
-    } else if (input.includes('diesel')) {
-        detectedFuel = 'diesel';
-    } else if (input.includes('hybrid')) {
-        detectedFuel = 'hybrid-petrol';
-    } else if (input.includes('electric')) {
-        detectedFuel = 'electric';
+    for (const [fuelType, patterns] of Object.entries(fuelTypePatterns)) {
+        if (patterns.some(pattern => input.includes(pattern))) {
+            detectedFuel = fuelType;
+            break;
+        }
     }
     
     // Extract transmission type
     let detectedTransmission = null;
-    if (input.includes('automatic') || input.includes('auto')) {
-        detectedTransmission = 'automatic';
-    } else if (input.includes('manual')) {
-        detectedTransmission = 'manual';
+    for (const [transmissionType, patterns] of Object.entries(transmissionPatterns)) {
+        if (patterns.some(pattern => input.includes(pattern))) {
+            detectedTransmission = transmissionType;
+            break;
+        }
     }
     
     // Extract drive type
     let detectedDrive = null;
-    if (input.match(/\b(four wheel drive|4wd|4x4|all wheel drive|awd)\b/i)) {
-        detectedDrive = 'four wheel drive';
-    } else if (input.match(/\b(front wheel drive|fwd)\b/i)) {
-        detectedDrive = 'front wheel drive';
-    } else if (input.match(/\b(rear wheel drive|rwd)\b/i)) {
-        detectedDrive = 'rear wheel drive';
+    for (const [driveType, patterns] of Object.entries(driveTypePatterns)) {
+        const driveRegexes = patterns.map(pattern => new RegExp(`\\b${pattern}\\b`, 'i'));
+        if (driveRegexes.some(regex => regex.test(input))) {
+            detectedDrive = driveType;
+            break;
+        }
     }
     
     // Extract badge
     let detectedBadge = null;
-    // Check for specific badge patterns with word boundaries to avoid partial matches
-    const badgePatterns = [
-        'r', 'gti', '110tsi', '132tsi', '162tsi', 'tdi550', 'tdi580',
-        'highline', 'comfortline', 'trendline', 'alltrack',
-        'gx', 'gxl', 'cruiser', 'edge', 'gts', 'grande'
-    ];
-    
     for (const badge of badgePatterns) {
-        // Use word boundary for short badges, otherwise could match anywhere
         const regex = badge.length <= 3 ? 
             new RegExp(`\\b${badge}\\b`, 'i') : 
             new RegExp(`\\b${badge}\\b`, 'i');
@@ -142,73 +137,33 @@ export const findBestVehicleMatch = async (description: string): Promise<{ vehic
         }
     }
     
-    // SPECIAL CASE: If only asking for hybrid vehicle with no make/model
-    if (detectedFuel === 'hybrid-petrol' && !detectedMake && !detectedModel) {
-        // Direct query for a Toyota hybrid - we know Toyota has hybrids in our database
-        const hybridSql = `
-            SELECT v.*, COUNT(l.id) as listing_count
-            FROM vehicle v
-            LEFT JOIN listing l ON v.id = l.vehicle_id
-            WHERE LOWER(fuel_type) LIKE '%hybrid%'
-            GROUP BY v.id
-            ORDER BY COUNT(l.id) DESC
-            LIMIT 1
-        `;
-        
-        const hybridResults = await query(hybridSql, []);
-        
-        if (hybridResults.length > 0) {
-            return { 
-                vehicle: hybridResults[0], 
-                score: 3  // Medium confidence for generic hybrid query
-            };
-        }
-    }
-    
-    // SPECIAL CASE: If asking for RAV4 with hybrid explicitly
-    if (detectedModel === 'rav4' && detectedFuel === 'hybrid-petrol') {
-        // Direct query for a RAV4 hybrid
-        const rav4HybridSql = `
-            SELECT v.*, COUNT(l.id) as listing_count
-            FROM vehicle v
-            LEFT JOIN listing l ON v.id = l.vehicle_id
-            WHERE LOWER(model) = 'rav4' AND LOWER(fuel_type) LIKE '%hybrid%'
-            GROUP BY v.id
-            ORDER BY COUNT(l.id) DESC
-            LIMIT 1
-        `;
-        
-        const rav4HybridResults = await query(rav4HybridSql, []);
-        
-        if (rav4HybridResults.length > 0) {
-            return { 
-                vehicle: rav4HybridResults[0], 
-                score: 5  // High confidence for specific model+fuel match
-            };
-        }
-    }
-    
-    // Build the query conditions
+    // Build query
     const conditions = [];
     const params = [];
+    let totalWeight = 0;
     
-    // Only use detectedMake if it's in our available makes
+    // Add make condition
     if (detectedMake && availableMakes.includes(detectedMake)) {
         conditions.push(`LOWER(make) = $${params.length + 1}`);
         params.push(detectedMake);
+        totalWeight += attributeWeights.make;
     }
     
-    // Only use detectedModel if it's in our available models
+    // Add model condition
     if (detectedModel && availableModels.includes(detectedModel)) {
         conditions.push(`LOWER(model) = $${params.length + 1}`);
         params.push(detectedModel);
+        totalWeight += attributeWeights.model;
     }
     
+    // Add badge condition
     if (detectedBadge) {
         conditions.push(`LOWER(badge) LIKE $${params.length + 1}`);
         params.push(`%${detectedBadge}%`);
+        totalWeight += attributeWeights.badge;
     }
     
+    // Add fuel condition
     if (detectedFuel) {
         if (detectedFuel === 'hybrid-petrol') {
             conditions.push(`LOWER(fuel_type) LIKE $${params.length + 1}`);
@@ -217,100 +172,103 @@ export const findBestVehicleMatch = async (description: string): Promise<{ vehic
             conditions.push(`LOWER(fuel_type) = $${params.length + 1}`);
             params.push(detectedFuel);
         }
+        totalWeight += attributeWeights.fuel_type;
     }
     
+    // Add transmission condition
     if (detectedTransmission) {
         conditions.push(`LOWER(transmission_type) = $${params.length + 1}`);
         params.push(detectedTransmission);
+        totalWeight += attributeWeights.transmission_type;
     }
     
+    // Add drive type condition
     if (detectedDrive) {
         conditions.push(`LOWER(drive_type) = $${params.length + 1}`);
         params.push(detectedDrive);
+        totalWeight += attributeWeights.drive_type;
     }
     
-    // No conditions means no match - be more strict here
+    // Exit if no conditions
     if (conditions.length === 0) {
         return { vehicle: null, score: 1 };
     }
     
-    // If we have found a make in the input, but it's not in our list, return no match
-    const mentionedMake = detectedMake !== null;
-    if (!mentionedMake && conditions.length < 2 && !detectedFuel) {
-        // If no make was detected and we have fewer than 2 attribute conditions,
-        // and no fuel type was specified, it's probably too generic to match
+    // Exit if query too generic
+    if (!detectedMake && !detectedModel && conditions.length < 2 && !detectedFuel) {
         return { vehicle: null, score: 1 };
     }
     
-    // Build the SQL query using AND for precision - we want specific matches
+    // Generate weighted SQL case expressions
+    const weightCases = [];
+    
+    if (detectedMake) {
+        weightCases.push(`CASE WHEN LOWER(make) = '${detectedMake}' THEN ${attributeWeights.make} ELSE 0 END`);
+    }
+    
+    if (detectedModel) {
+        weightCases.push(`CASE WHEN LOWER(model) = '${detectedModel}' THEN ${attributeWeights.model} ELSE 0 END`);
+    }
+    
+    if (detectedBadge) {
+        weightCases.push(`CASE WHEN LOWER(badge) LIKE '%${detectedBadge}%' THEN ${attributeWeights.badge} ELSE 0 END`);
+    }
+    
+    if (detectedFuel) {
+        if (detectedFuel === 'hybrid-petrol') {
+            weightCases.push(`CASE WHEN LOWER(fuel_type) LIKE '%hybrid%' THEN ${attributeWeights.fuel_type} ELSE 0 END`);
+        } else {
+            weightCases.push(`CASE WHEN LOWER(fuel_type) = '${detectedFuel}' THEN ${attributeWeights.fuel_type} ELSE 0 END`);
+        }
+    }
+    
+    if (detectedTransmission) {
+        weightCases.push(`CASE WHEN LOWER(transmission_type) = '${detectedTransmission}' THEN ${attributeWeights.transmission_type} ELSE 0 END`);
+    }
+    
+    if (detectedDrive) {
+        weightCases.push(`CASE WHEN LOWER(drive_type) = '${detectedDrive}' THEN ${attributeWeights.drive_type} ELSE 0 END`);
+    }
+    
+    const weightExpression = weightCases.join(' + ');
+    
+    // SQL query: Finds vehicles matching all conditions, calculates match quality score
+    // based on weighted attributes, and orders by match quality and popularity
     const sql = `
-        SELECT v.*, COUNT(l.id) as listing_count
+        SELECT 
+            v.*, 
+            COUNT(l.id) as listing_count,
+            (${weightExpression}) AS match_weight,
+            CASE WHEN ${totalWeight} > 0 THEN (${weightExpression})::float / ${totalWeight} ELSE 0 END as match_quality
         FROM vehicle v
         LEFT JOIN listing l ON v.id = l.vehicle_id
         WHERE ${conditions.join(' AND ')}
         GROUP BY v.id
-        ORDER BY COUNT(l.id) DESC
+        ORDER BY match_quality DESC, COUNT(l.id) DESC
         LIMIT 1
     `;
     
-    // Execute the query
     const results = await query(sql, params);
     
-    // If no matches, return null
+    // Return null if no matches
     if (results.length === 0) {
         return { vehicle: null, score: 1 };
     }
     
-    // Get best match
+    // Calculate score
     const bestMatch = results[0];
+    let score = 1;
     
-    // Calculate confidence score
-    let score = 3; // Default medium confidence
+    if (bestMatch.match_quality) {
+        score = Math.min(5, Math.max(2, Math.round(bestMatch.match_quality * 4) + 1));
+    }
     
-    // Make + model specific matches are high confidence
-    if (detectedMake && detectedModel && 
-        bestMatch.make.toLowerCase() === detectedMake && 
-        bestMatch.model.toLowerCase() === detectedModel) {
-        score = 4;
-        
-        // If we also match another attribute, it's very high confidence
-        if (detectedFuel || detectedTransmission || detectedDrive || detectedBadge) {
-            score = 5;
-        }
-    }
-    // Special handling for badge-specific matches like "Golf R"
-    else if (detectedModel && detectedBadge && 
-             bestMatch.model.toLowerCase() === detectedModel &&
-             bestMatch.badge.toLowerCase().includes(detectedBadge)) {
-        score = 4;
-    }
-    // Special case for hybrid searches
-    else if (detectedFuel === 'hybrid-petrol' && bestMatch.fuel_type.toLowerCase().includes('hybrid')) {
-        score = 3;
-        if (detectedMake && bestMatch.make.toLowerCase() === detectedMake) {
-            score = 4;
-        }
-    }
-    // For just make + one other attribute
-    else if (detectedMake && bestMatch.make.toLowerCase() === detectedMake) {
-        score = 3;
-        // Adding more attributes increases confidence
-        let additionalMatches = 0;
-        if (detectedFuel && (bestMatch.fuel_type.toLowerCase() === detectedFuel || 
-                             (detectedFuel === 'hybrid-petrol' && bestMatch.fuel_type.toLowerCase().includes('hybrid')))) {
-            additionalMatches++;
-        }
-        if (detectedTransmission && bestMatch.transmission_type.toLowerCase() === detectedTransmission) {
-            additionalMatches++;
-        }
-        if (detectedDrive && bestMatch.drive_type.toLowerCase() === detectedDrive) {
-            additionalMatches++;
-        }
-        if (additionalMatches >= 2) {
-            score = 5; // Very high confidence with make + 2 other attributes
-        } else if (additionalMatches == 1) {
-            score = 4; // High confidence with make + 1 other attribute
-        }
+    // Boost score for multiple attributes
+    const attrCount = conditions.length;
+    if (attrCount >= 3) {
+        score = Math.min(5, score + 1);
+    } else if ((detectedMake && detectedModel) || (detectedModel && detectedBadge)) {
+        score = Math.min(5, score + 1);
     }
     
     return { vehicle: bestMatch, score };
