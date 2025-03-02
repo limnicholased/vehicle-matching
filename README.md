@@ -37,7 +37,7 @@ The algorithm returns a vehicle match score between 1 and 5, where 1 indicates a
    DB_HOST=localhost    # Database host address (localhost for local development)
    DB_NAME=database_name # Name of your vehicle database
    DB_PASS=your_password # Database password
-   DB_PORT=5433         # PostgreSQL port (default is 5432, adjust as needed)
+   DB_PORT=5432         # PostgreSQL port (default is 5432, adjust as needed)
    ```
 
    Copy the contents from `config/.env.sample` to `config/.env` and update with your actual database credentials:
