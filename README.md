@@ -27,17 +27,37 @@ The algorithm returns a vehicle match score between 1 and 5, where 1 indicates a
    - Load the provided SQL data in `data/data.sql` into a PostgreSQL database
    - The database connection settings can be configured in `src/db.ts`
 
-2. **Install Dependencies**
+2. **Environment Configuration**
+
+   The application requires a PostgreSQL database connection. Create a `.env` file in the `config` directory using the template below:
+
+   ```
+   # Database Configuration
+   DB_USER=username     # Your database username
+   DB_HOST=localhost    # Database host address (localhost for local development)
+   DB_NAME=database_name # Name of your vehicle database
+   DB_PASS=your_password # Database password
+   DB_PORT=5433         # PostgreSQL port (default is 5432, adjust as needed)
+   ```
+
+   Copy the contents from `config/.env.sample` to `config/.env` and update with your actual database credentials:
+   ```bash
+   cp config/.env.sample config/.env
+   ```
+
+   Note: The `.env` file contains sensitive information and should never be committed to version control.
+
+3. **Install Dependencies**
    ```bash
    npm install
    ```
 
-3. **Run the Matcher**
+4. **Run the Matcher**
    ```bash
    npx ts-node src/index.ts
    ```
 
-4. **Matcher Output**
+5. **Matcher Output**
    - The program will run through a series of test cases
    - For each test, it will output:
      - Whether a match was found
